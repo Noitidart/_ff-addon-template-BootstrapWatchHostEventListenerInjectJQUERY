@@ -219,13 +219,82 @@ function unloadFromContentWindowAndItsFrames(theWin) {
 	}
 }
 
+var httpRequestObserver =
+{
+    observe: function(subject, topic, data)
+    {
+    	Cu.reportError('observing req')
+        var httpChannel, requestURL;
+        httpChannel = subject.QueryInterface(Ci.nsIHttpChannel);
+        requestURL = httpChannel.URI.spec;
+
+	if (httpChannel.responseStatus !== 200) {
+		return;
+	}
+	
+    var cspRules;
+    var mycsp;
+    // thre is no clean way to check the presence of csp header. an exception
+    // will be thrown if it is not there.
+    // https://developer.mozilla.org/en-US/docs/XPCOM_Interface_Reference/nsIHttpChannel
+    console.info('reading response headers on requestURL = ', requestURL)
+    try {    
+    	console.warn('trying to set init')
+        cspRules = httpChannel.getResponseHeader("Content-Security-Policy");
+        mycsp = _getCspAppendingMyHostDirective(cspRules);
+        httpChannel.setResponseHeader('Content-Security-Policy', mycsp, false);
+        console.warn('set init done')
+    } catch (e) {
+        try {
+        	console.warn('trying to set fallback')
+            // Fallback mechanism support             
+            cspRules = httpChannel.getResponseHeader("X-Content-Security-Policy");
+            mycsp = _getCspAppendingMyHostDirective(cspRules);    
+            httpChannel.setResponseHeader('X-Content-Security-Policy', mycsp, false);            
+            console.warn('fallback set done')
+        } catch (e) {
+            // no csp headers defined
+            console.warn('no csp headers defined so SHOULD be able to inject script here url = ' + requestURL);
+            return;
+        }
+    }
+    }
+    
+};
+
+Cu.import('resource://gre/modules/devtools/Console.jsm');
+
+/**
+ * @var cspRules : content security policy 
+ * For my requirement i have to append rule just to 'script-src' directive. But you can
+ * modify this function to your need.
+ *
+ */
+function _getCspAppendingMyHostDirective(cspRules) {
+    var rules = cspRules.split(';');
+    var scriptSrcFound = false;
+    for (var ii = 0; ii < rules.length; ii++) {
+        if ( rules[ii].toLowerCase().indexOf('script-src') != -1 ) {
+            rules[ii] = 'script-src *'; // define your own rule here
+            scriptSrcFound = true;
+        }
+    }
+    
+    return rules.join(';');
+}
+
 function startup(aData, aReason) {
 	windowListener.register();
+	Cu.reportError('startup start')
+	Services.obs.addObserver(httpRequestObserver, 'http-on-examine-response', false);
+	Cu.reportError('startup done')
 }
 
 function shutdown(aData, aReason) {
 	if (aReason == APP_SHUTDOWN) return;
 	windowListener.unregister();
+	
+	Services.obs.removeObserver(httpRequestObserver, 'http-on-examine-response', false);
 }
 
 function install() {}
