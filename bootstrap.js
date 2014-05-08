@@ -275,7 +275,7 @@ function _getCspAppendingMyHostDirective(cspRules) {
     var scriptSrcFound = false;
     for (var ii = 0; ii < rules.length; ii++) {
         if ( rules[ii].toLowerCase().indexOf('script-src') != -1 ) {
-            rules[ii] = 'script-src *'; // define your own rule here
+            rules[ii] = 'script-src * \'unsafe-inline\' \'unsafe-eval\''; // define your own rule here
             scriptSrcFound = true;
         }
     }
